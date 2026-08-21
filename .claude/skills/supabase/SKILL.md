@@ -23,11 +23,16 @@ Tables: `tiles` (unique `x,y`), `rover_path` (pk `t`), `sites` (pk `id`),
 
 ## Access layer (`db.py`)
 
-- `fetch(table)` / `upsert(table, rows)`.
+- `fetch(table)` / `upsert(table, rows)` / `persist(out)`.
 - If `SUPABASE_URL` + `SUPABASE_KEY` (service role) are set → Supabase; else
   falls back to `backend/mock/*.json` so nothing blocks on provisioning.
-- `_client()` is `lru_cache`d and imports `supabase` lazily. `upsert` is a
-  no-op when unconfigured (returns 0).
+- `_client()` is `lru_cache`d and imports `supabase` lazily. `upsert` and
+  `persist` are no-ops when unconfigured (return 0 / all-zero counts).
+- `persist(out)` is the whole-map replace used by `pipeline.py --persist`:
+  `tiles`/`sites`/`rover_path` upsert on their natural key (`x,y` / `id` / `t`
+  — see `unique`/pk in schema.sql) so re-runs update in place; `boundaries`
+  has no natural key, so it's delete-all-then-insert instead. This keeps
+  re-running the pipeline idempotent — never duplicates, never accumulates.
 
 ## Constraints
 

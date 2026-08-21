@@ -12,8 +12,9 @@ computed flow:
       -> scoring (safety_score, zone)      # the ONLY decision step
       -> tiles / sites / boundaries / path
 
-Run:  python -m app.pipeline [--scene scene_0] [--write]
+Run:  python -m app.pipeline [--scene scene_0] [--write] [--persist]
 --write persists to backend/mock/*.json (the served contract source).
+--persist writes to Supabase via app.db.persist (no-op if unconfigured).
 Pure stdlib.
 """
 from __future__ import annotations
@@ -21,6 +22,7 @@ import argparse
 import json
 from pathlib import Path
 
+from app import db
 from app.perception.segment import segment
 from app.depth.pipeline import derive_geometry
 from app.slam.fuse import fuse_single, placeholder_path
@@ -79,6 +81,8 @@ def main():
     ap.add_argument("--scene", default="scene_0")
     ap.add_argument("--write", action="store_true",
                     help="persist to backend/mock/*.json")
+    ap.add_argument("--persist", action="store_true",
+                    help="persist to Supabase (no-op if unconfigured)")
     args = ap.parse_args()
     out = run(args.scene)
     zones = sorted({t["zone"] for t in out["tiles"]})
@@ -87,6 +91,13 @@ def main():
     if args.write:
         write(out)
         print(f"wrote {', '.join(_FILE.values())} to {MOCK}")
+    if args.persist:
+        if db._client() is None:
+            print("Supabase not configured — no-op (set SUPABASE_URL/SUPABASE_KEY)")
+        else:
+            counts = db.persist(out)
+            print("persisted to Supabase: " +
+                  ", ".join(f"{k}={v}" for k, v in counts.items()))
 
 
 if __name__ == "__main__":
