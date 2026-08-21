@@ -194,7 +194,7 @@ documented synthetic placeholders until real stereo imagery lands.
 - **Evaluation:** ✅ DONE — `app/eval/metrics.py`: seg IoU/mIoU, depth MAE/RMSE, zone agreement, safety-score MAE, and the headline **false-safe rate** (GT-hazard predicted buildable), with a self-check incl. an assertion that real `scoring.py` never false-safes known hazards. Segmentation scores real dataset labels; depth/zone GT synthetic until labelled captures land.
 - **Edge-AI:** ✅ DONE — `app/edge/budget.py` (per-stage latency/memory harness) + `app/edge/quantize.py` (real INT8 of the seg centroid model, 8× shrink, 0 class flips / no false-safe) + `docs/architecture/edge-ai.md` (compute envelope, per-stage budgets, cadence strategy, MobileNetV3-Small backbone decision, depth/SLAM resolution-knob shrink). Full NN quantization pipeline (INT8/ONNX) still gated on a trained model landing. *Risk:* rad-hard CPU budget; dev-machine timings are proxies.
 - **Frontend:** owned by a teammate — out of scope for this repo's agent workflow.
-- **Deploy:** Docker + CI (phases.md Phase 8).
+- **Deploy:** ✅ DONE — lean `backend/Dockerfile` (no CV deps) + `frontend/Dockerfile` + `docker-compose.yml` (both built/ran); two-project Vercel (`vercel.json` + `backend/vercel.json`); `ci.yml` gate + guarded manual `deploy.yml`; `DEPLOY.md`. No live deploy triggered — that's the user's call.
 
 ---
 

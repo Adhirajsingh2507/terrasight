@@ -1,0 +1,15 @@
+# Keep the backend image lean — main.py/db.py only need app/ + mock/.
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+
+# Offline/on-rover tooling and fixtures — not part of the served API.
+requirements-cv.txt
+data/
+tests/
+supabase/
+gen_mock.py
+
+# Local env / secrets — never bake into the image.
+.env
+.env.local
