@@ -119,15 +119,18 @@ A change touching scoring or the contract is not done until these pass. See the
 
 ## Deployment
 
-Two Vercel projects: frontend (root `vercel.json` → `rootDirectory: frontend`,
-Next.js) and backend (`backend/vercel.json`, FastAPI `app/main.py`). Frontend
-reaches the backend via `NEXT_PUBLIC_API_URL` (a public base URL — no secret).
-Container/self-host path: `backend/Dockerfile` + `frontend/Dockerfile` +
-`docker-compose.yml`. The deployed backend image installs `requirements.txt`
-only (never `requirements-cv.txt`). Backend env (`SUPABASE_URL`, `SUPABASE_KEY`)
-is set on the backend project/service only, never in the frontend; unset ⇒
-backend serves `backend/mock/*.json` (see `db.py`). CI: `.github/workflows/ci.yml`
-runs the gate; CD: `deploy.yml` (guarded, manual). Full guide: `DEPLOY.md`.
+One Vercel project (`terrasight`, `services` framework): root `vercel.json`
+declares `services.frontend` (Next.js) + `services.backend` (FastAPI
+`app.main:app`), and `/api/backend/*` rewrites to the backend service — frontend
+↔ backend is same-origin, no `NEXT_PUBLIC_API_URL` needed on Vercel. `vercel.json`
+must keep the `services` block and must NOT use `rootDirectory`. Container/self-
+host path: `backend/Dockerfile` + `frontend/Dockerfile` + `docker-compose.yml`
+(there the frontend uses `NEXT_PUBLIC_API_URL`; the frontend image sets
+`NEXT_OUTPUT=standalone`, which Vercel must not). The deployed backend installs
+`requirements.txt` only (never `requirements-cv.txt`). `SUPABASE_URL`/`SUPABASE_KEY`
+are set on the backend only, never in the frontend; unset ⇒ backend serves
+`backend/mock/*.json` (see `db.py`). CI: `.github/workflows/ci.yml` runs the gate;
+CD: `deploy.yml` (guarded, manual). Full guide: `DEPLOY.md`.
 
 ## Definition of done
 
