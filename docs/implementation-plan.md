@@ -189,9 +189,10 @@ documented synthetic placeholders until real stereo imagery lands.
 
 ## P7 — Persistence, evaluation, edge, frontend, deploy  *(post-slice)*
 
-- **Persistence:** `pipeline.py` upserts to Supabase via existing `db.upsert` instead of only writing mock. *Test:* mock-fallback path unchanged when env unset. *Risk:* service-role key exposure — backend-only.
+- **Testing/CI:** ✅ DONE — `tests/test_db_fallback.py` locks the mock-fallback path (fetch serves mock verbatim, upsert is a safe no-op, `_MOCK_FILE` covers every served table; lru_cache/env-safe); `.github/workflows/ci.yml` runs the full `validate-terrasight.sh` gate (incl. safety regression) on push/PR to `main`.
+- **Persistence:** mock-fallback path now locked by `test_db_fallback.py`. Live Supabase upsert wiring from `pipeline.py` remains future work. *Risk:* service-role key exposure — backend-only.
 - **Evaluation:** ✅ DONE — `app/eval/metrics.py`: seg IoU/mIoU, depth MAE/RMSE, zone agreement, safety-score MAE, and the headline **false-safe rate** (GT-hazard predicted buildable), with a self-check incl. an assertion that real `scoring.py` never false-safes known hazards. Segmentation scores real dataset labels; depth/zone GT synthetic until labelled captures land.
-- **Edge-AI:** ✅ budgeting DONE — `app/edge/budget.py` (per-stage latency/memory harness on `scene_0`) + `docs/architecture/edge-ai.md` (compute envelope, per-stage budgets, cadence strategy). Quantization/backbone selection **deferred** until a trained model replaces the classical stages (entry criteria + INT8/ONNX plan in the doc). *Risk:* rad-hard CPU budget; dev-machine timings are proxies.
+- **Edge-AI:** ✅ DONE — `app/edge/budget.py` (per-stage latency/memory harness) + `app/edge/quantize.py` (real INT8 of the seg centroid model, 8× shrink, 0 class flips / no false-safe) + `docs/architecture/edge-ai.md` (compute envelope, per-stage budgets, cadence strategy, MobileNetV3-Small backbone decision, depth/SLAM resolution-knob shrink). Full NN quantization pipeline (INT8/ONNX) still gated on a trained model landing. *Risk:* rad-hard CPU budget; dev-machine timings are proxies.
 - **Frontend:** owned by a teammate — out of scope for this repo's agent workflow.
 - **Deploy:** Docker + CI (phases.md Phase 8).
 

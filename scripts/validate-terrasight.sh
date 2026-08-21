@@ -35,6 +35,9 @@ step "Pipeline stage self-checks"
 step "Fixture + end-to-end pipeline"
 ( cd "$BACKEND" && "$PY" tests/test_fixtures.py && "$PY" tests/test_pipeline.py )
 
+step "DB mock-fallback path"
+( cd "$BACKEND" && "$PY" tests/test_db_fallback.py )
+
 step "Dataset ingestion validator"
 ( cd "$BACKEND" && "$PY" data/validate_dataset.py )
 
@@ -43,6 +46,9 @@ step "Evaluation metrics self-check"
 
 step "Edge latency/memory budget"
 ( cd "$BACKEND" && "$PY" -m app.edge.budget )
+
+step "Edge INT8 quantization self-check"
+( cd "$BACKEND" && "$PY" -m app.edge.quantize )
 
 # ---------------------------------------------------------- API contract tests
 step "API contract shape check"
