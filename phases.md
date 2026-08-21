@@ -49,25 +49,25 @@ handoffs — see `docs/implementation-plan.md` (P0–P5).
 - [x] Train/eval splits (split-by-scene) + `validate_dataset.py` leakage guard — `dataset-agent`
 - [x] Metrics `app/eval/metrics.py` — seg IoU/mIoU, depth MAE/RMSE, zone agreement, safety MAE, **false-safe rate** (headline) — `testing-agent`
 
-## Phase 5 — Edge / On-Rover Optimization
-- [ ] Quantize + shrink seg/depth/SLAM models — `edge-ai-agent`
-- [ ] Latency / memory / power budgeting — `edge-ai-agent`
-- [ ] Backbone choices for rover-class compute — `edge-ai-agent`
+## Phase 5 — Edge / On-Rover Optimization ✅
+- [x] Latency / memory budgeting — `app/edge/budget.py` harness (per-stage ms + peak KiB on `scene_0`, budget ceilings) + `docs/architecture/edge-ai.md` compute envelope — `edge-ai-agent`
+- [x] Quantize + shrink model — `app/edge/quantize.py` real INT8 of the seg centroids (the only float params; 8× shrink), 0 class flips / hazard-stable (no false-safe); depth/SLAM have no weights (shrink = resolution/matcher knobs, documented) — `edge-ai-agent`
+- [x] Backbone choice — decided: MobileNetV3-Small target for a future NN; classical stack is the interim backbone (`edge-ai.md`) — `edge-ai-agent`
 
 ## Phase 6 — Frontend
 _Owned by a teammate — out of scope for this repo's agent workflow._
 
-## Phase 7 — Testing & QA
-- [x] Scoring + stage self-check demos (`__main__` in scoring/segment/depth/fuse/terrain) — `testing-agent`
+## Phase 7 — Testing & QA ✅
+- [x] Scoring + stage self-check demos (`__main__` in scoring/segment/depth/stereo/pose/fuse/terrain/eval/edge) — `testing-agent`
 - [x] Contract-shape checks (backend vs mock, `test_contract.py`) — `testing-agent`
 - [x] Fixture + end-to-end pipeline tests (`test_fixtures.py`, `test_pipeline.py`) — `testing-agent`
-- [ ] Dedicated mock-fallback path test in `db.py` — `testing-agent`
-- [ ] Safety regression invariants in **CI** (currently local gate only) — `safety-agent`
+- [x] Dedicated mock-fallback path test (`test_db_fallback.py`: fetch/upsert/coverage, lru_cache-safe) — `testing-agent`
+- [x] Safety regression + full gate in **CI** — `.github/workflows/ci.yml` runs `validate-terrasight.sh` on push/PR to `main` — `devops-agent`
 
-## Phase 8 — Deployment
-- [ ] Dockerfiles (frontend + FastAPI) — `devops-agent`
-- [ ] GitHub Actions CI/CD — `devops-agent`
-- [ ] Vercel config + env wiring; no secrets in frontend bundle — `devops-agent`
+## Phase 8 — Deployment ✅
+- [x] Dockerfiles — lean `backend/Dockerfile` (requirements.txt only, no CV deps) + multi-stage `frontend/Dockerfile` + `docker-compose.yml` (both images built + ran) — `devops-agent`
+- [x] CI/CD — `ci.yml` (gate on push/PR) + `deploy.yml` (guarded, manual, no-ops without `VERCEL_TOKEN`) — `devops-agent`
+- [x] Vercel config + env wiring — single `services`-framework project (`vercel.json`: frontend + backend + `/api/backend` rewrite), deploy verified (preview READY); `SUPABASE_KEY` backend-only, zero frontend leaks; `DEPLOY.md` — `devops-agent`
 
 ---
 

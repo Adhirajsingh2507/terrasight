@@ -40,3 +40,34 @@ def upsert(table: str, rows: list[dict]) -> int:
         return 0
     sb.table(table).upsert(rows).execute()
     return len(rows)
+
+
+# Natural key per table used to make re-running the pipeline idempotent
+# (full-map regenerate each run, so writes must replace, not accumulate).
+# boundaries has no natural key (see schema.sql) -> handled as delete-all +
+# insert in persist() below instead of an on_conflict upsert.
+_NATURAL_KEY = {"tiles": "x,y", "sites": "id", "rover_path": "t"}
+
+
+def persist(out: dict) -> dict[str, int]:
+    """Full-map replace of pipeline output into Supabase. Idempotent: re-runs
+    upsert natural-key tables in place and replace boundaries (delete-all,
+    re-insert) so nothing duplicates or accumulates. No-op returning
+    all-zero counts when Supabase isn't configured; never raises.
+    """
+    counts = {t: 0 for t in _MOCK_FILE}
+    sb = _client()
+    if sb is None:
+        return counts
+    for table, key in _NATURAL_KEY.items():
+        rows = out.get(table) or []
+        if rows:
+            sb.table(table).upsert(rows, on_conflict=key).execute()
+            counts[table] = len(rows)
+    # boundaries: identity pk only, no natural key -> replace wholesale.
+    sb.table("boundaries").delete().neq("id", 0).execute()
+    rows = out.get("boundaries") or []
+    if rows:
+        sb.table("boundaries").insert(rows).execute()
+        counts["boundaries"] = len(rows)
+    return counts
