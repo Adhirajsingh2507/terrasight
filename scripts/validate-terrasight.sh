@@ -41,6 +41,9 @@ step "Dataset ingestion validator"
 step "Evaluation metrics self-check"
 ( cd "$BACKEND" && "$PY" -m app.eval.metrics )
 
+step "Edge latency/memory budget"
+( cd "$BACKEND" && "$PY" -m app.edge.budget )
+
 # ---------------------------------------------------------- API contract tests
 step "API contract shape check"
 ( cd "$BACKEND" && "$PY" tests/test_contract.py )

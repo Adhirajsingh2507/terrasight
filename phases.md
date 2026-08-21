@@ -49,10 +49,10 @@ handoffs — see `docs/implementation-plan.md` (P0–P5).
 - [x] Train/eval splits (split-by-scene) + `validate_dataset.py` leakage guard — `dataset-agent`
 - [x] Metrics `app/eval/metrics.py` — seg IoU/mIoU, depth MAE/RMSE, zone agreement, safety MAE, **false-safe rate** (headline) — `testing-agent`
 
-## Phase 5 — Edge / On-Rover Optimization
-- [ ] Quantize + shrink seg/depth/SLAM models — `edge-ai-agent`
-- [ ] Latency / memory / power budgeting — `edge-ai-agent`
-- [ ] Backbone choices for rover-class compute — `edge-ai-agent`
+## Phase 5 — Edge / On-Rover Optimization *(budgeting ✅, model opt deferred)*
+- [x] Latency / memory budgeting — `app/edge/budget.py` harness (per-stage ms + peak KiB on `scene_0`, budget ceilings) + `docs/architecture/edge-ai.md` compute envelope — `edge-ai-agent`
+- [ ] Quantize + shrink models — _deferred: no trained NN yet (all stages classical); INT8/ONNX plan + entry criteria in `edge-ai.md`_ — `edge-ai-agent`
+- [ ] Backbone choices for rover-class compute — _planned in `edge-ai.md` (MobileNet-class), selection deferred until a model lands_ — `edge-ai-agent`
 
 ## Phase 6 — Frontend
 _Owned by a teammate — out of scope for this repo's agent workflow._
