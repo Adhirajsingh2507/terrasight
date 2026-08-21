@@ -24,3 +24,6 @@ data/raw/
 .DS_Store
 .vercel
 .env*
+
+# local sync tooling output
+scripts/sync.log
