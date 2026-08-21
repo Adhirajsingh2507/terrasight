@@ -119,11 +119,15 @@ A change touching scoring or the contract is not done until these pass. See the
 
 ## Deployment
 
-Vercel monorepo (`vercel.json`): `frontend` (Next.js) + `backend`
-(FastAPI `app.main:app`); `/api/backend/*` rewrites to the backend service.
-Backend env (`SUPABASE_URL`, `SUPABASE_KEY`) is set in Vercel/CI, never in the
-frontend. Unset ⇒ backend serves `backend/mock/*.json` (see `db.py`). See the
-`devops-agent` and `vercel:deploy` skill.
+Two Vercel projects: frontend (root `vercel.json` → `rootDirectory: frontend`,
+Next.js) and backend (`backend/vercel.json`, FastAPI `app/main.py`). Frontend
+reaches the backend via `NEXT_PUBLIC_API_URL` (a public base URL — no secret).
+Container/self-host path: `backend/Dockerfile` + `frontend/Dockerfile` +
+`docker-compose.yml`. The deployed backend image installs `requirements.txt`
+only (never `requirements-cv.txt`). Backend env (`SUPABASE_URL`, `SUPABASE_KEY`)
+is set on the backend project/service only, never in the frontend; unset ⇒
+backend serves `backend/mock/*.json` (see `db.py`). CI: `.github/workflows/ci.yml`
+runs the gate; CD: `deploy.yml` (guarded, manual). Full guide: `DEPLOY.md`.
 
 ## Definition of done
 

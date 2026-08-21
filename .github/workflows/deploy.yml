@@ -1,0 +1,68 @@
+name: Deploy
+
+# Guarded CD: no-ops when Vercel secrets aren't configured, so this workflow
+# never fails a fork/PR run or a repo that hasn't set up deploy credentials
+# yet. See DEPLOY.md for one-time setup (VERCEL_TOKEN, VERCEL_ORG_ID,
+# VERCEL_PROJECT_ID_FRONTEND, VERCEL_PROJECT_ID_BACKEND).
+#
+# This workflow does not run automatically here — trigger manually
+# (workflow_dispatch) once secrets are configured, or push to main after CI
+# is green. No deploy is triggered by adding this file.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  skipped:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.ready == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "VERCEL_TOKEN not set — skipping deploy (no-op). See DEPLOY.md."
+
+  deploy-frontend:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_FRONTEND }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g vercel@latest
+      - run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd .
+      - run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd .
+      - run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd .
+
+  deploy-backend:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g vercel@latest
+      - run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd backend
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_BACKEND }}
+      - run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd backend
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_BACKEND }}
+      - run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd backend
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_BACKEND }}

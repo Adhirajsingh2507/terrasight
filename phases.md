@@ -64,10 +64,10 @@ _Owned by a teammate — out of scope for this repo's agent workflow._
 - [x] Dedicated mock-fallback path test (`test_db_fallback.py`: fetch/upsert/coverage, lru_cache-safe) — `testing-agent`
 - [x] Safety regression + full gate in **CI** — `.github/workflows/ci.yml` runs `validate-terrasight.sh` on push/PR to `main` — `devops-agent`
 
-## Phase 8 — Deployment
-- [ ] Dockerfiles (frontend + FastAPI) — `devops-agent`
-- [ ] GitHub Actions CI/CD — `devops-agent`
-- [ ] Vercel config + env wiring; no secrets in frontend bundle — `devops-agent`
+## Phase 8 — Deployment ✅
+- [x] Dockerfiles — lean `backend/Dockerfile` (requirements.txt only, no CV deps) + multi-stage `frontend/Dockerfile` + `docker-compose.yml` (both images built + ran) — `devops-agent`
+- [x] CI/CD — `ci.yml` (gate on push/PR) + `deploy.yml` (guarded, manual, no-ops without `VERCEL_TOKEN`) — `devops-agent`
+- [x] Vercel config + env wiring — two-project layout (root `vercel.json` + `backend/vercel.json`); `SUPABASE_KEY` backend-only, verified zero frontend leaks; `DEPLOY.md` — `devops-agent`
 
 ---
 
