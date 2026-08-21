@@ -1,9 +1,9 @@
 """TerraSight mock-fallback regression test (db.py).
 
 Locks the fallback path: with Supabase unconfigured, fetch() must serve
-backend/mock/*.json verbatim and upsert() must be a safe no-op — never raise,
-never write. Also guards that _MOCK_FILE covers every table main.py serves,
-so a new endpoint can't silently ship without a mock fallback.
+backend/mock/*.json verbatim and upsert()/persist() must be a safe no-op —
+never raise, never write. Also guards that _MOCK_FILE covers every table
+main.py serves, so a new endpoint can't silently ship without a mock fallback.
 
 Runnable two ways:
     python backend/tests/test_db_fallback.py   # plain asserts
@@ -69,6 +69,27 @@ def test_upsert_is_noop_when_unconfigured():
         _restore_env(saved)
 
 
+def test_persist_is_noop_when_unconfigured():
+    """db.persist must be a safe no-op when Supabase isn't configured: never
+    raise, return all-zero counts, and never touch the mock/*.json files
+    (persist is the Supabase write path, distinct from --write's mock path).
+    The live Supabase path (upsert/delete/insert against a real project)
+    can't be exercised here — no creds in CI/dev; this only locks the
+    fallback contract.
+    """
+    saved = _unconfigured_env()
+    try:
+        before = {f: (db.MOCK / f).read_text() for f in db._MOCK_FILE.values()}
+        out = {"tiles": [{"x": 0, "y": 0}], "sites": [{"id": "S1"}],
+               "rover_path": [{"t": 0}], "boundaries": [{"type": "crater"}]}
+        counts = db.persist(out)
+        assert counts == {"tiles": 0, "sites": 0, "rover_path": 0, "boundaries": 0}
+        for fname, text in before.items():
+            assert (db.MOCK / fname).read_text() == text, f"persist() must never write mock/{fname}"
+    finally:
+        _restore_env(saved)
+
+
 def test_mock_file_covers_every_served_table():
     """_MOCK_FILE must match exactly the tables main.py fetches — a new
     endpoint can't silently lack a mock fallback."""
@@ -91,5 +112,6 @@ if __name__ == "__main__":
     test_client_none_when_unconfigured()
     test_fetch_returns_mock_for_every_table()
     test_upsert_is_noop_when_unconfigured()
+    test_persist_is_noop_when_unconfigured()
     test_mock_file_covers_every_served_table()
     print("db fallback ok")
