@@ -67,7 +67,7 @@ _Owned by a teammate — out of scope for this repo's agent workflow._
 ## Phase 8 — Deployment ✅
 - [x] Dockerfiles — lean `backend/Dockerfile` (requirements.txt only, no CV deps) + multi-stage `frontend/Dockerfile` + `docker-compose.yml` (both images built + ran) — `devops-agent`
 - [x] CI/CD — `ci.yml` (gate on push/PR) + `deploy.yml` (guarded, manual, no-ops without `VERCEL_TOKEN`) — `devops-agent`
-- [x] Vercel config + env wiring — two-project layout (root `vercel.json` + `backend/vercel.json`); `SUPABASE_KEY` backend-only, verified zero frontend leaks; `DEPLOY.md` — `devops-agent`
+- [x] Vercel config + env wiring — single `services`-framework project (`vercel.json`: frontend + backend + `/api/backend` rewrite), deploy verified (preview READY); `SUPABASE_KEY` backend-only, zero frontend leaks; `DEPLOY.md` — `devops-agent`
 
 ---
 

@@ -14,6 +14,8 @@ COPY . .
 # Public, non-secret: base URL the browser/server use to reach the backend.
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Emit .next/standalone for the lean runtime stage (Vercel builds omit this).
+ENV NEXT_OUTPUT=standalone
 RUN npm run build
 
 FROM node:20-alpine AS runner

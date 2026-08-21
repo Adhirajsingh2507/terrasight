@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Lean runtime image for the Docker deploy path (frontend/Dockerfile);
-  // no effect on Vercel builds. See DEPLOY.md.
-  output: "standalone",
+  // Standalone output ONLY for the Docker image (frontend/Dockerfile sets
+  // NEXT_OUTPUT=standalone). Vercel must NOT use standalone — it breaks
+  // Vercel's build trace (next-server.js.nft.json). See DEPLOY.md.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
 };
 
 export default nextConfig;
