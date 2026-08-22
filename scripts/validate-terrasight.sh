@@ -68,8 +68,11 @@ fi
 
 # ------------------------------------------------------------ Git diff sanity
 step "Git diff sanity"
-# Unresolved merge-conflict markers in tracked files.
-if git -C "$ROOT" grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- ':!scripts/validate-terrasight.sh' >/tmp/ts_conflicts 2>/dev/null; then
+# Unresolved merge-conflict markers in tracked files. Match only real git
+# markers — `<<<<<<< `/`>>>>>>> `/`||||||| ` (7 chars + space + label) and a
+# bare `=======` divider (exactly 7, alone on the line) — so ASCII art made
+# of `=` runs (e.g. carl-sagan.tsx) doesn't false-positive.
+if git -C "$ROOT" grep -nE '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|) |^=======$' -- ':!scripts/validate-terrasight.sh' >/tmp/ts_conflicts 2>/dev/null; then
   echo "FAIL: merge conflict markers found:"; cat /tmp/ts_conflicts; exit 1
 fi
 # Service-role key must never be committed (see CLAUDE.md).
