@@ -94,22 +94,41 @@ def stereo_geometry(left, right, calib: Calibration, cell_size_m: float) -> list
 # Self-check
 # ---------------------------------------------------------------------------
 
-def _synthetic_pair(width=64, height=32, k=0.05, base_depth=3.0,
+def _synthetic_pair(cv2, width=112, height=48, k=0.05, base_depth=3.0,
                      calib: Calibration = DEFAULT_CALIBRATION, seed=0):
-    """Synthetic rectified pair for a known fronto-parallel-in-y tilted plane:
-    depth(x) = base_depth + k*x (metres). Returns (left, right, expected_depth_row).
+    """Synthetic rectified pair for a known tilted plane: depth(x) = base_depth
+    + k*x (metres). Returns (left, right, expected_depth_row).
+
+    Three things this fixture must get right for SGBM to actually recover the
+    geometry (an earlier version got all three wrong, so the self-check only
+    ever "passed" by being skipped when cv2 was absent):
+
+    - **Disparity sign.** In cv2's convention a feature at left column x sits at
+      x - d in the right image, so the right image samples the texture at
+      `x + disp(x)`, not `x - disp(x)`.
+    - **Matchable texture.** Per-pixel white noise is pathological for SGBM's
+      smoothness prior + uniqueness/speckle filters; a mildly blurred field
+      (like real imagery) matches reliably.
+    - **Sub-pixel shift.** Integer-pixel shifts make depth a staircase and the
+      derived slope spiky; a `remap`ped continuous shift keeps depth smooth.
+
+    Width must also exceed min_disparity + num_disparities by more than
+    blockSize/2 or OpenCV (>=5) rejects the pair as too small.
     """
     rng = np.random.default_rng(seed)
     depth_row = base_depth + k * np.arange(width)
     disp_row = (calib.baseline_m * calib.focal_px) / depth_row
     max_shift = int(np.ceil(disp_row.max())) + 2
-    texture = rng.integers(0, 256, size=(height, width + max_shift), dtype=np.uint8)
-    left = texture[:, max_shift:max_shift + width]
-    right = np.empty_like(left)
-    for x in range(width):
-        src = max_shift + x - int(round(disp_row[x]))
-        right[:, x] = texture[:, src]
-    return left, right, depth_row
+    noise = rng.integers(0, 256, size=(height, width + max_shift)).astype(np.float32)
+    tex = cv2.GaussianBlur(noise, (0, 0), 1.4)
+    tex = (tex - tex.min()) / (tex.max() - tex.min()) * 255.0
+    left = np.ascontiguousarray(tex[:, :width]).astype(np.uint8)
+    map_x = np.repeat((np.arange(width)[None, :] + disp_row[None, :]).astype(np.float32),
+                      height, axis=0)
+    map_y = np.repeat(np.arange(height)[:, None], width, axis=1).astype(np.float32)
+    right = cv2.remap(tex, map_x, map_y, cv2.INTER_LINEAR,
+                      borderMode=cv2.BORDER_REFLECT).astype(np.uint8)
+    return left, np.ascontiguousarray(right), depth_row
 
 
 def _check_invalid_disparity_guard():
@@ -124,7 +143,7 @@ def _check_synthetic_plane(cv2):
     """Full round trip: synthetic tilted-plane stereo pair -> recovered slope
     within tolerance of the known-geometry answer."""
     calib, k, cell_size_m = DEFAULT_CALIBRATION, 0.05, 1.0
-    left, right, _ = _synthetic_pair(k=k, calib=calib)
+    left, right, _ = _synthetic_pair(cv2, k=k, calib=calib)
     grid = stereo_geometry(left, right, calib, cell_size_m)
     mid = len(grid) // 2
     slopes = [c.slope_deg for c in grid[mid][10:-10] if math.isfinite(c.slope_deg)]
