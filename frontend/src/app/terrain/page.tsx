@@ -244,6 +244,9 @@ export default function TerrainPage() {
       const startY = new Array<number>(n);
       const dropDelay = new Array<number>(n);
       const baseColors = new Array<THREE.Color>(n);
+      // Deterministic per-tile jitter for the drop-in (a fractional hash of the
+      // index) — reproducible, and avoids Math.random in the render path.
+      const jitter = (i: number) => ((i * 2654435761) % 1000) / 1000;
       for (let i = 0; i < n; i++) {
         const tile = tiles[i];
         const height = Math.max(0.3, tile.safety_score * 2.5);
@@ -251,8 +254,8 @@ export default function TerrainPage() {
         posX[i] = tile.x * STRIDE - offsetX;
         posZ[i] = tile.y * STRIDE - offsetZ;
         targetY[i] = height / 2 + 0.06;
-        startY[i] = targetY[i] + 12 + Math.random() * 6;
-        dropDelay[i] = i * 0.0015 + Math.random() * 0.3;
+        startY[i] = targetY[i] + 12 + jitter(i) * 6;
+        dropDelay[i] = i * 0.0015 + jitter(i * 7 + 1) * 0.3;
         baseColors[i] = new THREE.Color(ZONE_COLORS[tile.zone] || "#666666");
         blocks.setColorAt(i, baseColors[i]);
       }
