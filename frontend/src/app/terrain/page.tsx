@@ -74,7 +74,6 @@ export default function TerrainPage() {
       const { OrbitControls } = await import(
         "three/examples/jsm/controls/OrbitControls.js"
       );
-      const gsap = (await import("gsap")).default;
 
       if (destroyed) return;
 
@@ -218,223 +217,107 @@ export default function TerrainPage() {
       const BLOCK_SIZE = 0.55;
       const BLOCK_GAP = 0.04;
       const STRIDE = BLOCK_SIZE + BLOCK_GAP;
-      const blockMeshes: THREE.Mesh[] = [];
-      const blockData: TileData[] = [];
-
       const offsetX = (cols * STRIDE) / 2;
       const offsetZ = (cols * STRIDE) / 2;
 
-      for (let i = 0; i < tiles.length; i++) {
+      // One InstancedMesh for every cell — a single draw call and one shadow
+      // caster, so the full 50x40 grid renders smoothly. (Per-tile meshes +
+      // per-tile edge geometry + a gsap timeline per tile crashed the GPU on
+      // the big grid.) The staggered drop-in is driven from the render loop
+      // below instead of thousands of gsap tweens.
+      const n = tiles.length;
+      const box = new THREE.BoxGeometry(BLOCK_SIZE - 0.04, 1, BLOCK_SIZE - 0.04);
+      const blockMat = new THREE.MeshStandardMaterial({
+        metalness: 0.35,
+        roughness: 0.25,
+        emissiveIntensity: 0.12,
+      });
+      const blocks = new THREE.InstancedMesh(box, blockMat, n);
+      blocks.castShadow = true;
+      blocks.receiveShadow = true;
+      blocks.frustumCulled = false;
+
+      const heights = new Array<number>(n);
+      const posX = new Array<number>(n);
+      const posZ = new Array<number>(n);
+      const targetY = new Array<number>(n);
+      const startY = new Array<number>(n);
+      const dropDelay = new Array<number>(n);
+      const baseColors = new Array<THREE.Color>(n);
+      // Deterministic per-tile jitter for the drop-in (a fractional hash of the
+      // index) — reproducible, and avoids Math.random in the render path.
+      const jitter = (i: number) => ((i * 2654435761) % 1000) / 1000;
+      for (let i = 0; i < n; i++) {
         const tile = tiles[i];
-        const color = ZONE_COLORS[tile.zone] || "#666666";
         const height = Math.max(0.3, tile.safety_score * 2.5);
-
-        const geom = new THREE.BoxGeometry(
-          BLOCK_SIZE - 0.04,
-          height,
-          BLOCK_SIZE - 0.04
-        );
-
-        const hsl = { h: 0, s: 0, l: 0 };
-        new THREE.Color(color).getHSL(hsl);
-
-        const mat = new THREE.MeshStandardMaterial({
-          color: new THREE.Color(color),
-          emissive: new THREE.Color(color),
-          emissiveIntensity: 0.15,
-          metalness: 0.35,
-          roughness: 0.25,
-          transparent: true,
-          opacity: 0,
-        });
-
-        const mesh = new THREE.Mesh(geom, mat);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        // Edge wireframe
-        const edges = new THREE.EdgesGeometry(geom, 15);
-        const wire = new THREE.LineSegments(
-          edges,
-          new THREE.LineBasicMaterial({
-            color: new THREE.Color(color).multiplyScalar(1.3),
-            transparent: true,
-            opacity: 0.15,
-          })
-        );
-        mesh.add(wire);
-
-        // Target position
-        const tx = tile.x * STRIDE - offsetX;
-        const tz = tile.y * STRIDE - offsetZ;
-        const ty = height / 2 + 0.06;
-
-        mesh.userData = { tile, targetY: ty, wire, mat };
-
-        // Start above — will drop in
-        mesh.position.set(tx, ty + 12 + Math.random() * 6, tz);
-        mesh.scale.set(1, 1, 1);
-        scene.add(mesh);
-        blockMeshes.push(mesh);
-        blockData.push(tile);
-
-        // Staggered Tetris-style drop animation
-        const delay = i * 0.003 + Math.random() * 0.08;
-
-        gsap.to(mat, {
-          opacity: 1,
-          duration: 0.15,
-          delay,
-          ease: "power1.in",
-        });
-
-        const tl = gsap.timeline({ delay });
-
-        // Fall
-        tl.to(mesh.position, {
-          y: ty,
-          duration: 0.45,
-          ease: "power2.in",
-        });
-
-        // Squash on impact
-        tl.to(
-          mesh.scale,
-          {
-            y: 0.75,
-            x: 1.12,
-            z: 1.12,
-            duration: 0.08,
-            ease: "power2.out",
-          },
-          "-=0.02"
-        );
-
-        // Bounce
-        tl.to(mesh.position, {
-          y: ty + 0.1,
-          duration: 0.1,
-          ease: "power2.out",
-        });
-
-        tl.to(
-          mesh.scale,
-          {
-            y: 1.04,
-            x: 0.97,
-            z: 0.97,
-            duration: 0.1,
-            ease: "power2.out",
-          },
-          "<"
-        );
-
-        // Settle
-        tl.to(mesh.position, {
-          y: ty,
-          duration: 0.08,
-          ease: "power2.inOut",
-        });
-
-        tl.to(
-          mesh.scale,
-          { y: 1, x: 1, z: 1, duration: 0.08, ease: "power2.inOut" },
-          "<"
-        );
-
-        // Landing flash
-        tl.to(
-          mat,
-          { emissiveIntensity: 0.5, duration: 0.05 },
-          "-=0.2"
-        );
-        tl.to(mat, {
-          emissiveIntensity: 0.08,
-          duration: 0.35,
-          ease: "power2.out",
-        });
+        heights[i] = height;
+        posX[i] = tile.x * STRIDE - offsetX;
+        posZ[i] = tile.y * STRIDE - offsetZ;
+        targetY[i] = height / 2 + 0.06;
+        startY[i] = targetY[i] + 12 + jitter(i) * 6;
+        dropDelay[i] = i * 0.0015 + jitter(i * 7 + 1) * 0.3;
+        baseColors[i] = new THREE.Color(ZONE_COLORS[tile.zone] || "#666666");
+        blocks.setColorAt(i, baseColors[i]);
       }
 
-      // ── Raycasting / hover ──
+      const _m = new THREE.Matrix4();
+      const _q = new THREE.Quaternion();
+      const _p = new THREE.Vector3();
+      const _s = new THREE.Vector3();
+      const setInstance = (i: number, y: number) => {
+        _p.set(posX[i], y, posZ[i]);
+        _s.set(1, heights[i], 1);
+        blocks.setMatrixAt(i, _m.compose(_p, _q, _s));
+      };
+      for (let i = 0; i < n; i++) setInstance(i, startY[i]);
+      blocks.instanceMatrix.needsUpdate = true;
+      if (blocks.instanceColor) blocks.instanceColor.needsUpdate = true;
+      scene.add(blocks);
+
+      // ── Raycasting / hover ── (InstancedMesh: highlight by instanceId)
       const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2();
-      let hoveredMesh: THREE.Mesh | null = null;
+      const mouse = new THREE.Vector2(-1000, -1000);
+      let hoveredId = -1;
+      const HL_WHITE = new THREE.Color(0xffffff);
+      const _hc = new THREE.Color();
 
       function onMouseMove(e: MouseEvent) {
         mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(blockMeshes, false);
+        const hits = raycaster.intersectObject(blocks);
+        const id = hits.length > 0 ? (hits[0].instanceId ?? -1) : -1;
 
-        if (intersects.length > 0) {
-          const hit = intersects[0].object as THREE.Mesh;
-          if (hit !== hoveredMesh) {
-            // Unhover previous
-            if (hoveredMesh) {
-              const prev = hoveredMesh.userData;
-              gsap.to(prev.mat, {
-                emissiveIntensity: 0.08,
-                duration: 0.3,
-              });
-              gsap.to(hoveredMesh.scale, {
-                x: 1, y: 1, z: 1,
-                duration: 0.3,
-                ease: "power2.out",
-              });
-            }
-            hoveredMesh = hit;
-            const ud = hit.userData;
-            gsap.to(ud.mat, {
-              emissiveIntensity: 0.45,
-              duration: 0.2,
-            });
-            gsap.to(hit.scale, {
-              x: 1.08, y: 1.08, z: 1.08,
-              duration: 0.2,
-              ease: "power2.out",
-            });
-          }
+        if (id !== hoveredId) {
+          if (hoveredId >= 0) blocks.setColorAt(hoveredId, baseColors[hoveredId]);
+          hoveredId = id;
+          if (id >= 0) blocks.setColorAt(id, _hc.copy(baseColors[id]).lerp(HL_WHITE, 0.45));
+          if (blocks.instanceColor) blocks.instanceColor.needsUpdate = true;
+        }
 
-          // Tooltip
-          if (tooltipRef.current && hit.userData.tile) {
-            const t = hit.userData.tile as TileData;
-            tooltipRef.current.style.opacity = "1";
-            tooltipRef.current.style.transform = "translateY(0) scale(1)";
-            tooltipRef.current.style.left = `${e.clientX + 18}px`;
-            tooltipRef.current.style.top = `${e.clientY - 18}px`;
-            tooltipRef.current.innerHTML = `
-              <div style="color:${ZONE_COLORS[t.zone]};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">
-                ${ZONE_LABELS[t.zone]}
-              </div>
-              <div style="font-family:var(--font-mono,'monospace');font-size:13px;color:#f0f0f5;margin-bottom:6px">
-                Score: ${(t.safety_score * 100).toFixed(1)}%
-              </div>
-              <div style="font-size:11px;color:rgba(240,240,245,0.5);line-height:1.5">
-                ${CLASS_LABELS[t.class] || t.class}<br>
-                Slope: ${t.slope}° · Cell (${t.x},${t.y})<br>
-                5 m² · Elev ${t.z.toFixed(1)}m
-              </div>
-            `;
-          }
-        } else {
-          if (hoveredMesh) {
-            const prev = hoveredMesh.userData;
-            gsap.to(prev.mat, {
-              emissiveIntensity: 0.08,
-              duration: 0.3,
-            });
-            gsap.to(hoveredMesh.scale, {
-              x: 1, y: 1, z: 1,
-              duration: 0.3,
-              ease: "power2.out",
-            });
-            hoveredMesh = null;
-          }
-          if (tooltipRef.current) {
-            tooltipRef.current.style.opacity = "0";
-            tooltipRef.current.style.transform = "translateY(4px) scale(0.95)";
-          }
+        if (id >= 0 && tooltipRef.current) {
+          const t = tiles[id];
+          tooltipRef.current.style.opacity = "1";
+          tooltipRef.current.style.transform = "translateY(0) scale(1)";
+          tooltipRef.current.style.left = `${e.clientX + 18}px`;
+          tooltipRef.current.style.top = `${e.clientY - 18}px`;
+          tooltipRef.current.innerHTML = `
+            <div style="color:${ZONE_COLORS[t.zone]};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">
+              ${ZONE_LABELS[t.zone]}
+            </div>
+            <div style="font-family:var(--font-mono,'monospace');font-size:13px;color:#f0f0f5;margin-bottom:6px">
+              Score: ${(t.safety_score * 100).toFixed(1)}%
+            </div>
+            <div style="font-size:11px;color:rgba(240,240,245,0.5);line-height:1.5">
+              ${CLASS_LABELS[t.class] || t.class}<br>
+              Slope: ${t.slope}° · Cell (${t.x},${t.y})<br>
+              5 m² · Elev ${t.z.toFixed(1)}m
+            </div>
+          `;
+        } else if (tooltipRef.current) {
+          tooltipRef.current.style.opacity = "0";
+          tooltipRef.current.style.transform = "translateY(4px) scale(0.95)";
         }
       }
 
@@ -503,11 +386,27 @@ export default function TerrainPage() {
       }
       window.addEventListener("resize", onResize);
 
-      // ── Render loop ──
+      // ── Render loop ── (staggered drop-in driven here, not per-tile gsap)
+      const dropClock = new THREE.Clock();
+      let dropping = true;
+      const DROP_DUR = 0.55;
       function animate() {
         if (destroyed) return;
         requestAnimationFrame(animate);
         controls.update();
+        if (dropping) {
+          const now = dropClock.getElapsedTime();
+          let done = true;
+          for (let i = 0; i < n; i++) {
+            let p = (now - dropDelay[i]) / DROP_DUR;
+            if (p >= 1) p = 1;
+            else { done = false; if (p < 0) p = 0; }
+            const e = 1 - Math.pow(1 - p, 3); // easeOutCubic settle
+            setInstance(i, startY[i] + (targetY[i] - startY[i]) * e);
+          }
+          blocks.instanceMatrix.needsUpdate = true;
+          if (done) dropping = false;
+        }
         renderer.render(scene, camera);
       }
       animate();

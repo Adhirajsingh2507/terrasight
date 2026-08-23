@@ -209,27 +209,33 @@ function TerrainGrid3D({ tiles }: { tiles: Tile[] }) {
     grid.position.y = 0.01;
     scene.add(grid);
 
-    const terrainMeshes: THREE.Mesh[] = [];
-
-    tiles.forEach((tile) => {
+    // One InstancedMesh for every cell — a single draw call and one shadow
+    // caster, so the grid scales to thousands of tiles. (Per-tile meshes +
+    // per-tile edge geometry crashed the GPU context on the full 50x40 grid.)
+    const box = new THREE.BoxGeometry(bs - 0.04, 1, bs - 0.04);
+    const instMat = new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.1 });
+    const terrain = new THREE.InstancedMesh(box, instMat, tiles.length);
+    terrain.castShadow = true;
+    terrain.receiveShadow = true;
+    terrain.frustumCulled = false;
+    const _m = new THREE.Matrix4();
+    const _q = new THREE.Quaternion();
+    const _s = new THREE.Vector3();
+    const _p = new THREE.Vector3();
+    const _c = new THREE.Color();
+    const baseColors: THREE.Color[] = [];
+    tiles.forEach((tile, i) => {
       const height = Math.max(0.15, tile.safety_score * 2.5);
-      const geom = new THREE.BoxGeometry(bs - 0.04, height, bs - 0.04);
-      const mat = new THREE.MeshStandardMaterial({ color: ZONE_HEX[tile.zone] ?? 0x888888, roughness: 0.4, metalness: 0.1 });
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.position.set(tile.x * step - ox + step / 2, height / 2, tile.y * step - oz + step / 2);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData = { tile };
-      scene.add(mesh);
-      terrainMeshes.push(mesh);
-      
-      const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.06, transparent: true })
-      );
-      edges.position.copy(mesh.position);
-      scene.add(edges);
+      _p.set(tile.x * step - ox + step / 2, height / 2, tile.y * step - oz + step / 2);
+      _s.set(1, height, 1);
+      terrain.setMatrixAt(i, _m.compose(_p, _q, _s));
+      _c.setHex(ZONE_HEX[tile.zone] ?? 0x888888);
+      baseColors.push(_c.clone());
+      terrain.setColorAt(i, _c);
     });
+    terrain.instanceMatrix.needsUpdate = true;
+    if (terrain.instanceColor) terrain.instanceColor.needsUpdate = true;
+    scene.add(terrain);
 
     const dist = Math.max(cols, rows) * step * 0.9;
     camera.position.set(dist * 0.7, dist * 0.6, dist * 0.7);
@@ -238,7 +244,9 @@ function TerrainGrid3D({ tiles }: { tiles: Tile[] }) {
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2(-1000, -1000);
-    let hoveredMesh: THREE.Mesh | null = null;
+    let hoveredId = -1;
+    const WHITE = new THREE.Color(0xffffff);
+    const _hover = new THREE.Color();
 
     const onPointerMove = (e: PointerEvent) => {
       const rect = container.getBoundingClientRect();
@@ -253,29 +261,23 @@ function TerrainGrid3D({ tiles }: { tiles: Tile[] }) {
       controls.update(); 
       
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(terrainMeshes);
-      
-      if (intersects.length > 0) {
-        const object = intersects[0].object as THREE.Mesh;
-        if (hoveredMesh !== object) {
-          if (hoveredMesh) {
-            (hoveredMesh.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000);
-          }
-          hoveredMesh = object;
-          (hoveredMesh.material as THREE.MeshStandardMaterial).emissive.setHex(0x333333);
-          setHoveredTile(hoveredMesh.userData.tile);
+      const hits = raycaster.intersectObject(terrain);
+      const id = hits.length > 0 ? (hits[0].instanceId ?? -1) : -1;
+      if (id !== hoveredId) {
+        if (hoveredId >= 0) terrain.setColorAt(hoveredId, baseColors[hoveredId]);
+        hoveredId = id;
+        if (id >= 0) {
+          terrain.setColorAt(id, _hover.copy(baseColors[id]).lerp(WHITE, 0.5));
+          setHoveredTile(tiles[id]);
           container.style.cursor = "pointer";
-        }
-      } else {
-        if (hoveredMesh) {
-          (hoveredMesh.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000);
-          hoveredMesh = null;
+        } else {
           setHoveredTile(null);
           container.style.cursor = "default";
         }
+        if (terrain.instanceColor) terrain.instanceColor.needsUpdate = true;
       }
 
-      renderer.render(scene, camera); 
+      renderer.render(scene, camera);
     };
     sceneRef.current = { renderer, raf };
     animate();
